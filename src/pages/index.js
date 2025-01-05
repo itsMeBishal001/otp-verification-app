@@ -10,6 +10,165 @@ export default function Home() {
   const [verificationStatus, setVerificationStatus] = useState(null);
   const [demoOtp, setDemoOtp] = useState("");
 
+  const validatePhoneNumber = (phone) => {
+    const phoneRegex = /^\+[1-9]\d{1,14}$/;
+    if (!phone) return "Phone number is required";
+    if (!phoneRegex.test(phone))
+      return "Invalid phone number format. Use format: +1234567890";
+
+    const digitsOnly = phone.replace("+", "");
+    const validCountryCodes = {
+      1: 10, // Country code '1' requires 10 digits
+      91: 10, // Country code '91' requires 10 digits
+      44: 10, // Country code '44' requires 10 digits
+      61: 9, // Country code '61' requires 9 digits
+    };
+
+    let countryCode = "";
+    for (let i = 1; i <= 3; i++) {
+      const potentialCode = digitsOnly.substring(0, i);
+      if (validCountryCodes[potentialCode] !== undefined) {
+        countryCode = potentialCode;
+        break;
+      }
+    }
+
+    if (!countryCode) {
+      return "Invalid or unsupported country code";
+    }
+
+    const numberLength = digitsOnly.length - countryCode.length;
+    if (numberLength !== validCountryCodes[countryCode]) {
+      return `Invalid number length for country code +${countryCode}. Expected ${validCountryCodes[countryCode]} digits.`;
+    }
+
+    return null;
+  };
+
+  const validateOTP = (otp) => {
+    const otpRegex = /^\d{6}$/;
+    if (!otp) return "OTP is required";
+    if (!otpRegex.test(otp)) return "OTP must be 6 digits";
+    return null;
+  };
+
+  // Add validation state
+  const [errors, setErrors] = useState({
+    phone: null,
+    otp: null,
+  });
+
+  // Update the handlePhoneChange function
+  const handlePhoneChange = (e) => {
+    const value = e.target.value;
+    setPhoneNumber(value);
+    const error = validatePhoneNumber(value);
+    setErrors((prev) => ({ ...prev, phone: error }));
+  };
+
+  // Update the handleOTPChange function
+  const handleOTPChange = (e) => {
+    const value = e.target.value;
+    setOtp(value);
+    const error = validateOTP(value);
+    setErrors((prev) => ({ ...prev, otp: error }));
+  };
+
+  // Update handleSendOTP with validation
+  const handleSendOTP = async (e) => {
+    e.preventDefault();
+
+    // Validate before submission
+    const phoneError = validatePhoneNumber(phoneNumber);
+    if (phoneError) {
+      setErrors((prev) => ({ ...prev, phone: phoneError }));
+      setMessage(phoneError);
+      return;
+    }
+
+    try {
+      setApiStatus((prev) => ({
+        ...prev,
+        sendOtp: { called: true, success: false },
+      }));
+
+      const res = await fetch("/api/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phoneNumber }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to send OTP");
+      }
+
+      setApiStatus((prev) => ({
+        ...prev,
+        sendOtp: { called: true, success: true },
+      }));
+
+      setSessionId(data.sessionId);
+      setDemoOtp(data.demoOtp);
+      setStep(2);
+      setMessage("OTP sent successfully");
+    } catch (error) {
+      setApiStatus((prev) => ({
+        ...prev,
+        sendOtp: { called: true, success: false },
+      }));
+      setMessage(error.message);
+      console.error("Error sending OTP:", error);
+    }
+  };
+
+  // Update handleVerifyOTP with validation
+  const handleVerifyOTP = async (e) => {
+    e.preventDefault();
+
+    // Validate before submission
+    const otpError = validateOTP(otp);
+    if (otpError) {
+      setErrors((prev) => ({ ...prev, otp: otpError }));
+      setMessage(otpError);
+      return;
+    }
+
+    try {
+      setApiStatus((prev) => ({
+        ...prev,
+        verifyOtp: { called: true, success: false },
+      }));
+
+      const res = await fetch("/api/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, otp }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to verify OTP");
+      }
+
+      setApiStatus((prev) => ({
+        ...prev,
+        verifyOtp: { called: true, success: true },
+      }));
+
+      localStorage.setItem("token", data.jwtToken);
+      setStep(3);
+      setMessage("OTP verified successfully");
+    } catch (error) {
+      setApiStatus((prev) => ({
+        ...prev,
+        verifyOtp: { called: true, success: false },
+      }));
+      setMessage(error.message);
+      console.error("Error verifying OTP:", error);
+    }
+  };
+
   // Track API call status
   const [apiStatus, setApiStatus] = useState({
     sendOtp: { called: false, success: false },
@@ -48,104 +207,10 @@ export default function Home() {
       setVerificationStatus(false);
     }
   };
-
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      checkTokenStatus(token);
-    }
-  }, []);
-
-  const handleSendOTP = async (e) => {
-    e.preventDefault();
-    try {
-      setApiStatus((prev) => ({
-        ...prev,
-        sendOtp: { called: true, success: false },
-      }));
-
-      const res = await fetch("/api/send-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phoneNumber }),
-      });
-      const data = await res.json();
-
-      setApiStatus((prev) => ({
-        ...prev,
-        sendOtp: { called: true, success: res.ok },
-      }));
-
-      if (res.ok) {
-        setSessionId(data.sessionId);
-        setDemoOtp(data.demoOtp); // Store demo OTP
-        setStep(2);
-        setMessage("OTP sent successfully");
-      } else {
-        setMessage(data.message || "Error sending OTP");
-      }
-    } catch (error) {
-      setApiStatus((prev) => ({
-        ...prev,
-        sendOtp: { called: true, success: false },
-      }));
-      setMessage("Error sending OTP");
-    }
-  };
-
-  const handleVerifyOTP = async (e) => {
-    e.preventDefault();
-    try {
-      setApiStatus((prev) => ({
-        ...prev,
-        verifyOtp: { called: true, success: false },
-      }));
-
-      // Log request
-      console.log("Verify OTP API Request:");
-      console.log("Endpoint: /api/verify-otp");
-      console.log("Method: POST");
-      console.log("Request body:", {
-        sessionId: sessionId,
-        otp: otp,
-      });
-
-      const res = await fetch("/api/verify-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId, otp }),
-      });
-      const data = await res.json();
-
-      // Log response
-      console.log("Response:", data);
-
-      setApiStatus((prev) => ({
-        ...prev,
-        verifyOtp: { called: true, success: res.ok },
-      }));
-
-      if (res.ok) {
-        localStorage.setItem("token", data.jwtToken);
-        setStep(3);
-        setMessage("OTP verified successfully");
-      } else {
-        setMessage(data.message || "Error verifying OTP");
-      }
-    } catch (error) {
-      console.error("Error:", error);
-      setApiStatus((prev) => ({
-        ...prev,
-        verifyOtp: { called: true, success: false },
-      }));
-      setMessage("Error verifying OTP");
-    }
-  };
-
   const handleVerifyToken = async () => {
     const token = localStorage.getItem("token");
     if (!token) {
-      setMessage("No token available");
+      setMessage("No token available. Please complete OTP verification first.");
       return;
     }
 
@@ -155,14 +220,6 @@ export default function Home() {
         getVerify: { called: true, success: false },
       }));
 
-      // Log request
-      console.log("Get Verify API Request:");
-      console.log("Endpoint: /api/get-verify");
-      console.log("Method: GET");
-      console.log("Headers:", {
-        Authorization: `Bearer ${token}`,
-      });
-
       const res = await fetch("/api/get-verify", {
         method: "GET",
         headers: {
@@ -171,26 +228,33 @@ export default function Home() {
       });
       const data = await res.json();
 
-      // Log response
-      console.log("Response:", data);
+      if (!res.ok) {
+        throw new Error(data.message || "Token verification failed");
+      }
 
       setApiStatus((prev) => ({
         ...prev,
-        getVerify: { called: true, success: res.ok },
+        getVerify: { called: true, success: true },
       }));
 
       setVerificationStatus(data.isValid);
       setMessage(data.message);
     } catch (error) {
-      console.error("Error:", error);
       setApiStatus((prev) => ({
         ...prev,
         getVerify: { called: true, success: false },
       }));
-      setMessage("Error checking token status");
+      setMessage(error.message);
       setVerificationStatus(false);
+      console.error("Error verifying token:", error);
     }
   };
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      checkTokenStatus(token);
+    }
+  }, []);
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -339,15 +403,21 @@ export default function Home() {
               <input
                 type="tel"
                 value={phoneNumber}
-                onChange={(e) => setPhoneNumber(e.target.value)}
-                className="w-full p-2 border rounded"
+                onChange={handlePhoneChange}
+                className={`w-full p-2 border rounded ${
+                  errors.phone ? "border-red-500" : "border-gray-300"
+                }`}
                 placeholder="+1234567890"
                 required
               />
+              {errors.phone && (
+                <p className="mt-1 text-xs text-red-500">{errors.phone}</p>
+              )}
             </div>
             <button
               type="submit"
-              className="w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600"
+              className="w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600 disabled:bg-blue-300"
+              disabled={!!errors.phone}
             >
               Send OTP
             </button>
@@ -361,15 +431,22 @@ export default function Home() {
               <input
                 type="text"
                 value={otp}
-                onChange={(e) => setOtp(e.target.value)}
-                className="w-full p-2 border rounded"
+                onChange={handleOTPChange}
+                className={`w-full p-2 border rounded ${
+                  errors.otp ? "border-red-500" : "border-gray-300"
+                }`}
                 placeholder="123456"
+                maxLength={6}
                 required
               />
+              {errors.otp && (
+                <p className="mt-1 text-xs text-red-500">{errors.otp}</p>
+              )}
             </div>
             <button
               type="submit"
-              className="w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600"
+              className="w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600 disabled:bg-blue-300"
+              disabled={!!errors.otp}
             >
               Verify OTP
             </button>
