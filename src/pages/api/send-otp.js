@@ -21,11 +21,9 @@ export default function handler(req, res) {
     expiresIn: "5m",
   });
 
-  // In a real application, you would send the OTP via SMS here
-  console.log(`OTP for ${phoneNumber}: ${otp}`);
-
   res.status(200).json({
     sessionId,
     message: "OTP sent successfully",
+    demoOtp: otp, // Adding OTP in response for demo
   });
 }

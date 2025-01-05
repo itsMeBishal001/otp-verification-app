@@ -8,6 +8,7 @@ export default function Home() {
   const [message, setMessage] = useState("");
   const [step, setStep] = useState(1);
   const [verificationStatus, setVerificationStatus] = useState(null);
+  const [demoOtp, setDemoOtp] = useState("");
 
   // Track API call status
   const [apiStatus, setApiStatus] = useState({
@@ -63,23 +64,12 @@ export default function Home() {
         sendOtp: { called: true, success: false },
       }));
 
-      // Log request
-      console.log("Send OTP API Request:");
-      console.log("Endpoint: /api/send-otp");
-      console.log("Method: POST");
-      console.log("Request body:", {
-        phoneNumber: phoneNumber,
-      });
-
       const res = await fetch("/api/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phoneNumber }),
       });
       const data = await res.json();
-
-      // Log response
-      console.log("Response:", data);
 
       setApiStatus((prev) => ({
         ...prev,
@@ -88,13 +78,13 @@ export default function Home() {
 
       if (res.ok) {
         setSessionId(data.sessionId);
+        setDemoOtp(data.demoOtp); // Store demo OTP
         setStep(2);
         setMessage("OTP sent successfully");
       } else {
         setMessage(data.message || "Error sending OTP");
       }
     } catch (error) {
-      console.error("Error:", error);
       setApiStatus((prev) => ({
         ...prev,
         sendOtp: { called: true, success: false },
@@ -289,6 +279,36 @@ export default function Home() {
     );
   }
 
+  const DemoSection = () => (
+    <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+      <h3 className="text-sm font-semibold text-yellow-700 mb-2">
+        🚀 Demo Mode
+      </h3>
+      <p className="text-xs text-yellow-600 mb-2">
+        This is a demo version. In production, OTP would be sent via SMS.
+      </p>
+      {demoOtp && (
+        <div className="bg-white p-3 rounded border border-yellow-200">
+          <p className="text-sm text-yellow-800">Demo OTP:</p>
+          <div className="flex items-center gap-2">
+            <code className="text-lg font-mono font-bold text-yellow-700">
+              {demoOtp}
+            </code>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(demoOtp);
+                setMessage("OTP copied to clipboard!");
+              }}
+              className="text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-700 px-2 py-1 rounded"
+            >
+              Copy
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
       <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
@@ -309,6 +329,8 @@ export default function Home() {
             {message}
           </div>
         )}
+
+        <DemoSection />
 
         {step === 1 && (
           <form onSubmit={handleSendOTP}>
